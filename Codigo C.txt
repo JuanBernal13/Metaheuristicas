@@ -1,0 +1,1427 @@
+File: Makefile
+makefile
+Copiar
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99 -O2
+
+OBJS = main.o \
+       models_agent.o \
+       models_cell.o \
+       services_simulation_service.o \
+       utils_logger.o \
+       distributions.o
+
+all: klebsiella_sim
+
+klebsiella_sim: $(OBJS)
+	$(CC) $(CFLAGS) -o klebsiella_sim $(OBJS) -lm
+
+main.o: main.c models/agent.h models/cell.h services/simulation_service.h utils/logger.h distributions.h
+	$(CC) $(CFLAGS) -c main.c
+
+models_agent.o: models/agent.c models/agent.h models/states.h models/cell.h utils/logger.h
+	$(CC) $(CFLAGS) -c models/agent.c
+
+models_cell.o: models/cell.c models/cell.h
+	$(CC) $(CFLAGS) -c models/cell.c
+
+services_simulation_service.o: services/simulation_service.c services/simulation_service.h models/agent.h models/cell.h utils/logger.h
+	$(CC) $(CFLAGS) -c services/simulation_service.c
+
+utils_logger.o: utils/logger.c utils/logger.h
+	$(CC) $(CFLAGS) -c utils/logger.c
+
+distributions.o: distributions.c distributions.h
+	$(CC) $(CFLAGS) -c distributions.c
+
+clean:
+	rm -f *.o klebsiella_sim
+File: requirements.txt
+En C no se usa un archivo requirements.txt como en Python, pero si quisieras aproximar:
+
+java
+Copiar
+GNU Scientific Library (opcional, para distribuciones)
+File: models/states.h
+c
+Copiar
+#ifndef STATES_H
+#define STATES_H
+
+typedef enum {
+    S,  // Susceptible
+    V,  // Vacunado
+    E,  // Expuesto
+    I,  // Infectado
+    U,  // UCI
+    R,  // Recuperado
+    D   // Fallecido
+} EpidemicState;
+
+#endif
+File: models/cell.h
+c
+Copiar
+#ifndef CELL_H
+#define CELL_H
+
+typedef struct Cell {
+    int x;
+    int y;
+    int is_icu;
+    int icu_capacity;
+    int occupied_beds;
+    // Lista dinámica de agentes no la guardamos completa en C para no complicar
+    // En su lugar, cada "agente" sabe en qué cell está.
+} Cell;
+
+/**
+ * Crea una celda en la posición (x, y).
+ */
+Cell create_cell(int x, int y, int is_icu, int icu_capacity);
+
+/**
+ * Indica si hay cama UCI libre en esta celda.
+ */
+int cell_has_free_bed(Cell *cell);
+
+/**
+ * Ocupa una cama.
+ */
+void cell_occupy_bed(Cell *cell);
+
+/**
+ * Libera una cama.
+ */
+void cell_free_bed(Cell *cell);
+
+#endif
+File: models/cell.c
+c
+Copiar
+#include "cell.h"
+
+Cell create_cell(int x, int y, int is_icu, int icu_capacity) {
+    Cell cell;
+    cell.x = x;
+    cell.y = y;
+    cell.is_icu = is_icu;
+    cell.icu_capacity = is_icu ? icu_capacity : 0;
+    cell.occupied_beds = 0;
+    return cell;
+}
+
+int cell_has_free_bed(Cell *cell) {
+    if (!cell->is_icu) {
+        return 0;
+    }
+    return (cell->occupied_beds < cell->icu_capacity);
+}
+
+void cell_occupy_bed(Cell *cell) {
+    if (cell_has_free_bed(cell)) {
+        cell->occupied_beds++;
+    }
+}
+
+void cell_free_bed(Cell *cell) {
+    if (cell->occupied_beds > 0) {
+        cell->occupied_beds--;
+    }
+}
+File: models/agent.h
+c
+Copiar
+#ifndef AGENT_H
+#define AGENT_H
+
+#include <stdio.h>
+#include "states.h"
+#include "cell.h"
+
+/**
+ * Estructura base para un Agente. 
+ * Se usará herencia "manual" en C para HealthcareWorker y Patient.
+ */
+typedef struct Agent {
+    char unique_id[64];   // ID de texto
+    Cell *current_cell;   // Puntero a la celda en la que está
+    EpidemicState state;  // Estado epidemiológico
+
+    int is_health_worker; // 1 si es trabajador de la salud, 0 si no
+    int is_patient;       // 1 si es paciente, 0 si no
+} Agent;
+
+/**
+ * Estructura "heredada" para HealthcareWorker
+ */
+typedef struct HealthcareWorker {
+    Agent base;    // "Hereda" de Agent
+    // Parámetros epidemiológicos
+    double beta_h;
+    double sigma;
+    double alpha;
+    double gamma_;
+    double gamma_u;
+    double mu_i;
+    double mu_u;
+    double mu_nat;
+    double p_resus;
+
+    double age;
+    int use_probabilistic;
+
+    int vaccinated;
+    int wears_mask;
+    int resistant;
+} HealthcareWorker;
+
+/**
+ * Estructura "heredada" para Patient
+ */
+typedef struct Patient {
+    Agent base;    // "Hereda" de Agent
+
+    // Parámetros epidemiológicos
+    double beta_g;
+    double sigma;
+    double alpha;
+    double gamma_;
+    double gamma_u;
+    double mu_i;
+    double mu_u;
+    double mu_nat;
+    double p_resus;
+
+    double age;
+    int use_probabilistic;
+    int vaccinated;
+    int wears_mask;
+    int resistant;
+
+    int severity;
+    int icu_time;
+    int max_icu_time;
+} Patient;
+
+/**
+ * Crea un trabajador de la salud.
+ */
+HealthcareWorker create_healthcare_worker(
+    const char *unique_id,
+    Cell *cell,
+    double beta_h,
+    double sigma,
+    double alpha,
+    double gamma_,
+    double gamma_u,
+    double mu_i,
+    double mu_u,
+    double mu_nat,
+    double p_resus,
+    double age,
+    int use_probabilistic,
+    int vaccinated,
+    int wears_mask,
+    int resistant
+);
+
+/**
+ * Crea un paciente.
+ */
+Patient create_patient(
+    const char *unique_id,
+    Cell *cell,
+    double beta_g,
+    double sigma,
+    double alpha,
+    double gamma_,
+    double gamma_u,
+    double mu_i,
+    double mu_u,
+    double mu_nat,
+    double p_resus,
+    int severity,
+    double age,
+    int use_probabilistic,
+    int vaccinated,
+    int wears_mask,
+    int resistant
+);
+
+/**
+ * Ejecuta un paso de simulación para un HealthcareWorker.
+ */
+void healthcare_worker_step(HealthcareWorker *hw, int current_step, void *simulation_service);
+
+/**
+ * Ejecuta un paso de simulación para un Patient.
+ */
+void patient_step(Patient *p, int current_step, void *simulation_service);
+
+#endif
+File: models/agent.c
+c
+Copiar
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <stdio.h>
+#include "agent.h"
+#include "../services/simulation_service.h"
+#include "../utils/logger.h"
+
+/**
+ * Función interna auxiliar: dado un rate (tasa continua), convierte a
+ * probabilidad de suceso en un intervalo de tiempo discreto (delta=1).
+ */
+static double rate_to_prob(double rate) {
+    // p = 1 - exp(-rate)
+    if (rate <= 0.0) return 0.0;
+    return 1.0 - exp(-rate);
+}
+
+// --------------------------------------------------
+// Implementaciones de HealthcareWorker
+// --------------------------------------------------
+HealthcareWorker create_healthcare_worker(
+    const char *unique_id,
+    Cell *cell,
+    double beta_h,
+    double sigma,
+    double alpha,
+    double gamma_,
+    double gamma_u,
+    double mu_i,
+    double mu_u,
+    double mu_nat,
+    double p_resus,
+    double age,
+    int use_probabilistic,
+    int vaccinated,
+    int wears_mask,
+    int resistant
+) {
+    HealthcareWorker hw;
+    memset(&hw, 0, sizeof(HealthcareWorker));
+
+    // Llenar base Agent
+    strncpy(hw.base.unique_id, unique_id, 63);
+    hw.base.current_cell = cell;
+    hw.base.state = S;  // Inicia en S
+    hw.base.is_health_worker = 1;
+    hw.base.is_patient = 0;
+
+    // Parametros
+    hw.beta_h = beta_h;
+    hw.sigma = sigma;
+    hw.alpha = alpha;
+    hw.gamma_ = gamma_;
+    hw.gamma_u = gamma_u;
+    hw.mu_i = mu_i;
+    hw.mu_u = mu_u;
+    hw.mu_nat = mu_nat;
+    hw.p_resus = p_resus;
+    hw.age = age;
+    hw.use_probabilistic = use_probabilistic;
+    hw.vaccinated = vaccinated;
+    hw.wears_mask = wears_mask;
+    hw.resistant = resistant;
+
+    return hw;
+}
+
+/**
+ * Lógica de step de un trabajador de la salud
+ */
+void healthcare_worker_step(HealthcareWorker *hw, int current_step, void *service_ptr) {
+    SimulationService *service = (SimulationService *)service_ptr;
+
+    if (hw->base.state == D) {
+        return; // Nada que hacer
+    }
+
+    // 1) Muerte natural
+    double p_death_nat = rate_to_prob(hw->mu_nat);
+    if (((double)rand() / RAND_MAX) < p_death_nat) {
+        hw->base.state = D;
+        register_death(service, (Agent *)hw);
+        log_debug("%s falleció por causas naturales.", hw->base.unique_id);
+        return;
+    }
+
+    // 2) Transiciones
+    switch (hw->base.state) {
+        case S:
+        case V: {
+            int total_i = get_total_infectious(service);
+            int total_pop = get_total_population(service);
+            if (total_pop > 0) {
+                double beta_eff = hw->beta_h;
+                if (hw->vaccinated) {
+                    beta_eff *= 0.5;
+                }
+                if (hw->wears_mask) {
+                    beta_eff *= 0.7;
+                }
+                double lam = beta_eff * ( (double)total_i / (double)total_pop );
+                double p_inf = rate_to_prob(lam);
+                if (((double)rand() / RAND_MAX) < p_inf) {
+                    hw->base.state = E;
+                    log_debug("%s ha pasado a E (expuesto).", hw->base.unique_id);
+                }
+            }
+        } break;
+        case E: {
+            double p_ei = rate_to_prob(hw->sigma);
+            if (((double)rand() / RAND_MAX) < p_ei) {
+                hw->base.state = I;
+                log_debug("%s ha pasado a I (infectado).", hw->base.unique_id);
+            }
+        } break;
+        case I: {
+            double p_id = rate_to_prob(hw->mu_i);
+            if (((double)rand() / RAND_MAX) < p_id) {
+                hw->base.state = D;
+                register_death(service, (Agent*)hw);
+                log_debug("%s falleció en I.", hw->base.unique_id);
+            } else {
+                double p_iu = rate_to_prob(hw->alpha);
+                if (((double)rand() / RAND_MAX) < p_iu) {
+                    request_icu(service, (Agent*)hw);
+                } else {
+                    double adjusted_gamma = hw->gamma_;
+                    if (hw->resistant) {
+                        adjusted_gamma *= 0.5;
+                    }
+                    double p_ir = rate_to_prob(adjusted_gamma);
+                    if (((double)rand() / RAND_MAX) < p_ir) {
+                        hw->base.state = R;
+                        log_debug("%s se recuperó (R).", hw->base.unique_id);
+                    }
+                }
+            }
+        } break;
+        case U: {
+            // En UCI: muerte o recuperación
+            double p_ud = rate_to_prob(hw->mu_u);
+            if (((double)rand() / RAND_MAX) < p_ud) {
+                hw->base.state = D;
+                register_death(service, (Agent*)hw);
+                cell_free_bed(hw->base.current_cell);
+                log_debug("%s falleció en U.", hw->base.unique_id);
+            } else {
+                double adjusted_gamma_u = hw->gamma_u;
+                if (hw->resistant) {
+                    adjusted_gamma_u *= 0.5;
+                }
+                double p_ur = rate_to_prob(adjusted_gamma_u);
+                if (((double)rand() / RAND_MAX) < p_ur) {
+                    hw->base.state = R;
+                    cell_free_bed(hw->base.current_cell);
+                    log_debug("%s se recuperó desde UCI (R).", hw->base.unique_id);
+                }
+            }
+        } break;
+        case R: {
+            double p_rs = rate_to_prob(hw->p_resus);
+            if (((double)rand() / RAND_MAX) < p_rs) {
+                hw->base.state = S;
+                log_debug("%s R->S (re-susceptibilizado).", hw->base.unique_id);
+            }
+        } break;
+        default:
+            break;
+    }
+
+    // 3) Movilidad (simple)
+    // Factor ejemplo:
+    double mobility_factor = 0.1 + (50.0 - hw->age)*0.001;
+    if (mobility_factor < 0.05) mobility_factor = 0.05;
+    if (mobility_factor > 0.2) mobility_factor = 0.2;
+
+    if (((double)rand() / RAND_MAX) < mobility_factor) {
+        move_agent(service, (Agent*)hw);
+    }
+}
+
+// --------------------------------------------------
+// Implementaciones de Patient
+// --------------------------------------------------
+Patient create_patient(
+    const char *unique_id,
+    Cell *cell,
+    double beta_g,
+    double sigma,
+    double alpha,
+    double gamma_,
+    double gamma_u,
+    double mu_i,
+    double mu_u,
+    double mu_nat,
+    double p_resus,
+    int severity,
+    double age,
+    int use_probabilistic,
+    int vaccinated,
+    int wears_mask,
+    int resistant
+) {
+    Patient p;
+    memset(&p, 0, sizeof(Patient));
+
+    // Llenar base Agent
+    strncpy(p.base.unique_id, unique_id, 63);
+    p.base.current_cell = cell;
+    p.base.state = S;
+    p.base.is_health_worker = 0;
+    p.base.is_patient = 1;
+
+    // Parametros
+    p.beta_g = beta_g;
+    p.sigma = sigma;
+    p.alpha = alpha;
+    p.gamma_ = gamma_;
+    p.gamma_u = gamma_u;
+    p.mu_i = mu_i;
+    p.mu_u = mu_u;
+    p.mu_nat = mu_nat;
+    p.p_resus = p_resus;
+    p.age = age;
+    p.use_probabilistic = use_probabilistic;
+    p.vaccinated = vaccinated;
+    p.wears_mask = wears_mask;
+    p.resistant = resistant;
+
+    p.severity = severity;
+    p.icu_time = 0;
+    p.max_icu_time = 14;
+
+    return p;
+}
+
+void patient_step(Patient *p, int current_step, void *service_ptr) {
+    SimulationService *service = (SimulationService *)service_ptr;
+
+    if (p->base.state == D) {
+        return;
+    }
+
+    // 1) Muerte natural
+    double p_death_nat = rate_to_prob(p->mu_nat);
+    if (((double)rand() / RAND_MAX) < p_death_nat) {
+        p->base.state = D;
+        register_death(service, (Agent*)p);
+        log_debug("%s falleció por causas naturales.", p->base.unique_id);
+        return;
+    }
+
+    // 2) Transiciones
+    switch (p->base.state) {
+        case S:
+        case V: {
+            int total_i = get_total_infectious(service);
+            int total_pop = get_total_population(service);
+            if (total_pop > 0) {
+                double beta_eff = p->beta_g;
+                if (p->vaccinated) {
+                    beta_eff *= 0.5;
+                }
+                if (p->wears_mask) {
+                    beta_eff *= 0.7;
+                }
+                double lam = beta_eff * ((double)total_i / (double)total_pop);
+                double p_inf = rate_to_prob(lam);
+                if (((double)rand() / RAND_MAX) < p_inf) {
+                    p->base.state = E;
+                    log_debug("%s S->E (Expuesto).", p->base.unique_id);
+                }
+            }
+        } break;
+        case E: {
+            double p_ei = rate_to_prob(p->sigma);
+            if (((double)rand() / RAND_MAX) < p_ei) {
+                p->base.state = I;
+                log_debug("%s E->I (Infectado).", p->base.unique_id);
+            }
+        } break;
+        case I: {
+            double p_id = rate_to_prob(p->mu_i);
+            if (((double)rand() / RAND_MAX) < p_id) {
+                p->base.state = D;
+                register_death(service, (Agent*)p);
+                log_debug("%s falleció en I.", p->base.unique_id);
+            } else {
+                double adjusted_alpha = p->alpha * p->severity * (p->vaccinated ? 0.8 : 1.0);
+                double p_iu = rate_to_prob(adjusted_alpha);
+                if (((double)rand() / RAND_MAX) < p_iu) {
+                    request_icu(service, (Agent*)p);
+                } else {
+                    double adjusted_gamma = p->gamma_;
+                    if (p->resistant) {
+                        adjusted_gamma *= 0.5;
+                    }
+                    double p_ir = rate_to_prob(adjusted_gamma);
+                    if (((double)rand() / RAND_MAX) < p_ir) {
+                        p->base.state = R;
+                        log_debug("%s I->R (Recuperado).", p->base.unique_id);
+                    }
+                }
+            }
+        } break;
+        case U: {
+            p->icu_time++;
+            if (p->icu_time >= p->max_icu_time) {
+                // Al final, decide muerte o recuperación
+                double p_ud = rate_to_prob(p->mu_u);
+                if (((double)rand() / RAND_MAX) < p_ud) {
+                    p->base.state = D;
+                    register_death(service, (Agent*)p);
+                    log_debug("%s falleció en U tras %d días.", p->base.unique_id, p->icu_time);
+                } else {
+                    double adjusted_gamma_u = p->gamma_u;
+                    if (p->resistant) {
+                        adjusted_gamma_u *= 0.5;
+                    }
+                    double p_ur = rate_to_prob(adjusted_gamma_u);
+                    if (((double)rand() / RAND_MAX) < p_ur) {
+                        p->base.state = R;
+                        register_recovery_from_icu(service, (Agent*)p);
+                        log_debug("%s se recuperó de U tras %d días.", p->base.unique_id, p->icu_time);
+                    }
+                }
+            } else {
+                // Cada paso se evalúa la posibilidad
+                double p_ud = rate_to_prob(p->mu_u);
+                if (((double)rand() / RAND_MAX) < p_ud) {
+                    p->base.state = D;
+                    register_death(service, (Agent*)p);
+                    cell_free_bed(p->base.current_cell);
+                    log_debug("%s falleció en U.", p->base.unique_id);
+                } else {
+                    double adjusted_gamma_u = p->gamma_u;
+                    if (p->resistant) {
+                        adjusted_gamma_u *= 0.5;
+                    }
+                    double p_ur = rate_to_prob(adjusted_gamma_u);
+                    if (((double)rand() / RAND_MAX) < p_ur) {
+                        p->base.state = R;
+                        cell_free_bed(p->base.current_cell);
+                        log_debug("%s se recuperó de U (R).", p->base.unique_id);
+                    }
+                }
+            }
+        } break;
+        case R: {
+            double p_rs = rate_to_prob(p->p_resus);
+            if (((double)rand() / RAND_MAX) < p_rs) {
+                p->base.state = S;
+                log_debug("%s R->S (re-susceptibilizado).", p->base.unique_id);
+            } else {
+                // Alta
+                double discharge_prob = 0.005;
+                if (((double)rand() / RAND_MAX) < discharge_prob) {
+                    remove_patient(service, (Agent*)p);
+                    log_debug("%s ha sido dado de alta (R).", p->base.unique_id);
+                    return;
+                }
+            }
+        } break;
+        default:
+            break;
+    }
+
+    // 3) Movilidad
+    double mobility_factor = 0.05 + (50.0 - p->age)*0.0005;
+    if (mobility_factor < 0.02) mobility_factor = 0.02;
+    if (mobility_factor > 0.1) mobility_factor = 0.1;
+
+    if (((double)rand() / RAND_MAX) < mobility_factor) {
+        move_agent(service, (Agent*)p);
+    }
+}
+File: services/simulation_service.h
+c
+Copiar
+#ifndef SIMULATION_SERVICE_H
+#define SIMULATION_SERVICE_H
+
+#include "../models/agent.h"
+
+typedef struct SimulationService {
+    int width;
+    int height;
+
+    // Grilla de celdas
+    Cell **grid;
+
+    // Listas de agentes
+    HealthcareWorker *workers;
+    int workers_count;
+    int workers_size;
+
+    Patient *patients;
+    int patients_count;
+    int patients_size;
+
+    int deaths_count;
+    int recoveries_count;
+
+    // Cola de UCI (simple)
+    // Para simular prioridades, guardamos un array
+    Agent **icu_queue;
+    int icu_queue_count;
+    int icu_queue_size;
+
+    // Tasa de llegada de nuevos pacientes
+    double arrival_rate;
+} SimulationService;
+
+/**
+ * Crea e inicializa una SimulationService con el grid (width x height),
+ * las primeras n_icu_rows se marcan como UCI, con icu_capacity camas.
+ */
+SimulationService* create_simulation_service(int width, int height, int n_icu_rows, int icu_capacity);
+
+/**
+ * Libera la memoria de la SimulationService.
+ */
+void free_simulation_service(SimulationService *service);
+
+/**
+ * Agrega un trabajador de la salud al simulation_service.
+ */
+void add_worker(SimulationService *service, HealthcareWorker hw);
+
+/**
+ * Agrega un paciente al simulation_service.
+ */
+void add_patient(SimulationService *service, Patient p);
+
+/**
+ * Elimina un paciente (por alta).
+ */
+void remove_patient(SimulationService *service, Agent *p);
+
+/**
+ * Mueve un agente a una celda adyacente.
+ */
+void move_agent(SimulationService *service, Agent *ag);
+
+/**
+ * Retorna una celda aleatoria en el grid.
+ */
+Cell* get_random_cell(SimulationService *service);
+
+/**
+ * Retorna cuántos agentes en I o U hay.
+ */
+int get_total_infectious(SimulationService *service);
+
+/**
+ * Retorna cuántos agentes vivos hay.
+ */
+int get_total_population(SimulationService *service);
+
+/**
+ * Registra una muerte.
+ */
+void register_death(SimulationService *service, Agent *ag);
+
+/**
+ * Registra una recuperación desde UCI.
+ */
+void register_recovery_from_icu(SimulationService *service, Agent *ag);
+
+/**
+ * Retorna un array con conteos de estados (S, V, E, I, U, R, D).
+ * (se devuelven en positions 0..6 en ese orden).
+ */
+void get_state_counts(SimulationService *service, int counts[7]);
+
+/**
+ * Solicita ingreso a UCI (pone el agente en cola).
+ */
+void request_icu(SimulationService *service, Agent *ag);
+
+/**
+ * Asigna camas UCI a los agentes en cola.
+ */
+void assign_icu_beds(SimulationService *service);
+
+/**
+ * Retorna (occupied, capacity) de UCI.
+ */
+void get_icu_occupancy(SimulationService *service, int *occupied, int *capacity);
+
+/**
+ * Retorna la tasa de vacunación.
+ */
+double get_vaccination_rate(SimulationService *service);
+
+/**
+ * Genera un nuevo paciente con prob arrival_rate.
+ */
+void spawn_patient_if_needed(SimulationService *service,
+                             double beta_g, double sigma, double alpha,
+                             double gamma_, double gamma_u,
+                             double mu_i, double mu_u, double mu_nat);
+
+/**
+ * Un paso de simulación.
+ */
+void simulation_step(SimulationService *service, int current_step,
+                     double beta_h, double beta_g, double sigma,
+                     double alpha, double gamma_, double gamma_u,
+                     double mu_i, double mu_u, double mu_nat);
+
+#endif
+File: services/simulation_service.c
+c
+Copiar
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include "simulation_service.h"
+#include "../models/agent.h"
+#include "../utils/logger.h"
+
+SimulationService* create_simulation_service(int width, int height, int n_icu_rows, int icu_capacity) {
+    SimulationService *service = (SimulationService*)malloc(sizeof(SimulationService));
+    service->width = width;
+    service->height = height;
+
+    // Crear grilla
+    service->grid = (Cell**)malloc(width * sizeof(Cell*));
+    for (int x = 0; x < width; x++) {
+        service->grid[x] = (Cell*)malloc(height * sizeof(Cell));
+        for (int y = 0; y < height; y++) {
+            int is_icu = (y < n_icu_rows) ? 1 : 0;
+            service->grid[x][y] = create_cell(x, y, is_icu, icu_capacity);
+        }
+    }
+
+    // Inicializar listas dinámicas
+    service->workers = NULL;
+    service->workers_count = 0;
+    service->workers_size = 0;
+
+    service->patients = NULL;
+    service->patients_count = 0;
+    service->patients_size = 0;
+
+    service->deaths_count = 0;
+    service->recoveries_count = 0;
+
+    service->icu_queue = NULL;
+    service->icu_queue_count = 0;
+    service->icu_queue_size = 0;
+
+    service->arrival_rate = 0.6;
+
+    return service;
+}
+
+void free_simulation_service(SimulationService *service) {
+    if (!service) return;
+    // Liberar grid
+    for (int x = 0; x < service->width; x++) {
+        free(service->grid[x]);
+    }
+    free(service->grid);
+
+    // Liberar arrays
+    if (service->workers) {
+        free(service->workers);
+    }
+    if (service->patients) {
+        free(service->patients);
+    }
+    if (service->icu_queue) {
+        free(service->icu_queue);
+    }
+
+    // Finalmente liberar service
+    free(service);
+}
+
+static void ensure_workers_capacity(SimulationService *service) {
+    if (service->workers_count >= service->workers_size) {
+        int new_size = (service->workers_size == 0) ? 10 : service->workers_size * 2;
+        service->workers = (HealthcareWorker*)realloc(service->workers, new_size*sizeof(HealthcareWorker));
+        service->workers_size = new_size;
+    }
+}
+static void ensure_patients_capacity(SimulationService *service) {
+    if (service->patients_count >= service->patients_size) {
+        int new_size = (service->patients_size == 0) ? 10 : service->patients_size * 2;
+        service->patients = (Patient*)realloc(service->patients, new_size*sizeof(Patient));
+        service->patients_size = new_size;
+    }
+}
+static void ensure_icu_queue_capacity(SimulationService *service) {
+    if (service->icu_queue_count >= service->icu_queue_size) {
+        int new_size = (service->icu_queue_size == 0) ? 10 : service->icu_queue_size * 2;
+        service->icu_queue = (Agent**)realloc(service->icu_queue, new_size*sizeof(Agent*));
+        service->icu_queue_size = new_size;
+    }
+}
+
+void add_worker(SimulationService *service, HealthcareWorker hw) {
+    ensure_workers_capacity(service);
+    service->workers[service->workers_count++] = hw;
+}
+
+void add_patient(SimulationService *service, Patient p) {
+    ensure_patients_capacity(service);
+    service->patients[service->patients_count++] = p;
+}
+
+void remove_patient(SimulationService *service, Agent *ag) {
+    // Buscar en la lista
+    for (int i = 0; i < service->patients_count; i++) {
+        if (&service->patients[i].base == ag) {
+            // Encontrado
+            // Quitar de la lista (swap con el último y decrementar)
+            service->patients[i] = service->patients[service->patients_count - 1];
+            service->patients_count--;
+            break;
+        }
+    }
+}
+
+void move_agent(SimulationService *service, Agent *ag) {
+    if (!ag->current_cell) return;
+    int cx = ag->current_cell->x;
+    int cy = ag->current_cell->y;
+
+    int nx = cx + (rand() % 3 - 1); // -1, 0, 1
+    int ny = cy + (rand() % 3 - 1);
+
+    if (nx < 0) nx = 0;
+    if (nx >= service->width) nx = service->width - 1;
+    if (ny < 0) ny = 0;
+    if (ny >= service->height) ny = service->height - 1;
+
+    ag->current_cell = &service->grid[nx][ny];
+    log_debug("%s se movió a la celda (%d, %d).", ag->unique_id, nx, ny);
+}
+
+Cell* get_random_cell(SimulationService *service) {
+    int x = rand() % service->width;
+    int y = rand() % service->height;
+    return &service->grid[x][y];
+}
+
+int get_total_infectious(SimulationService *service) {
+    int count = 0;
+    // Infectious = I + U
+    for (int i = 0; i < service->workers_count; i++) {
+        EpidemicState st = service->workers[i].base.state;
+        if (st == I || st == U) count++;
+    }
+    for (int i = 0; i < service->patients_count; i++) {
+        EpidemicState st = service->patients[i].base.state;
+        if (st == I || st == U) count++;
+    }
+    return count;
+}
+
+int get_total_population(SimulationService *service) {
+    int count = 0;
+    for (int i = 0; i < service->workers_count; i++) {
+        if (service->workers[i].base.state != D) count++;
+    }
+    for (int i = 0; i < service->patients_count; i++) {
+        if (service->patients[i].base.state != D) count++;
+    }
+    return count;
+}
+
+void register_death(SimulationService *service, Agent *ag) {
+    service->deaths_count++;
+}
+
+void register_recovery_from_icu(SimulationService *service, Agent *ag) {
+    service->recoveries_count++;
+}
+
+void get_state_counts(SimulationService *service, int counts[7]) {
+    for (int i = 0; i < 7; i++) {
+        counts[i] = 0;
+    }
+    // Workers
+    for (int i = 0; i < service->workers_count; i++) {
+        counts[ service->workers[i].base.state ]++;
+    }
+    // Patients
+    for (int i = 0; i < service->patients_count; i++) {
+        counts[ service->patients[i].base.state ]++;
+    }
+}
+
+void request_icu(SimulationService *service, Agent *ag) {
+    // Priority = -severity (para que 3 sea mayor prior que 1)
+    ensure_icu_queue_capacity(service);
+    service->icu_queue[service->icu_queue_count++] = ag;
+    log_debug("%s solicitado UCI. (Se agregará a cola)", ag->unique_id);
+    assign_icu_beds(service);
+}
+
+void assign_icu_beds(SimulationService *service) {
+    if (service->icu_queue_count == 0) return;
+
+    // Ordenar la cola por "prioridad"
+    // En C, haremos un bubble sort simple para ejemplo
+    for (int i = 0; i < service->icu_queue_count - 1; i++) {
+        for (int j = 0; j < service->icu_queue_count - i - 1; j++) {
+            int severityA = 1;
+            if (service->icu_queue[j]->is_patient) {
+                Patient *pp = (Patient*)service->icu_queue[j];
+                severityA = pp->severity;
+            }
+            int severityB = 1;
+            if (service->icu_queue[j+1]->is_patient) {
+                Patient *pp = (Patient*)service->icu_queue[j+1];
+                severityB = pp->severity;
+            }
+            if (severityB > severityA) {
+                // swap
+                Agent *tmp = service->icu_queue[j];
+                service->icu_queue[j] = service->icu_queue[j+1];
+                service->icu_queue[j+1] = tmp;
+            }
+        }
+    }
+
+    // Intentar asignar
+    int idx = 0;
+    while (idx < service->icu_queue_count) {
+        Agent *ag = service->icu_queue[idx];
+        // Solo si sigue en estado I
+        if (ag->state != I) {
+            // remover de la cola
+            service->icu_queue[idx] = service->icu_queue[service->icu_queue_count-1];
+            service->icu_queue_count--;
+            continue;
+        }
+        // Buscar una celda con cama UCI libre
+        int found_bed = 0;
+        for (int x = 0; x < service->width && !found_bed; x++) {
+            for (int y = 0; y < service->height && !found_bed; y++) {
+                Cell *cell = &service->grid[x][y];
+                if (cell->is_icu && cell_has_free_bed(cell)) {
+                    cell_occupy_bed(cell);
+                    ag->current_cell = cell;
+                    ag->state = U;
+                    // remover de la cola
+                    service->icu_queue[idx] = service->icu_queue[service->icu_queue_count-1];
+                    service->icu_queue_count--;
+                    found_bed = 1;
+                    log_debug("%s asignado a UCI en (%d,%d).", ag->unique_id, cell->x, cell->y);
+                }
+            }
+        }
+        if (!found_bed) {
+            idx++;
+        }
+    }
+}
+
+void get_icu_occupancy(SimulationService *service, int *occupied, int *capacity) {
+    int occ = 0;
+    int cap = 0;
+    for (int x = 0; x < service->width; x++) {
+        for (int y = 0; y < service->height; y++) {
+            Cell *c = &service->grid[x][y];
+            if (c->is_icu) {
+                occ += c->occupied_beds;
+                cap += c->icu_capacity;
+            }
+        }
+    }
+    *occupied = occ;
+    *capacity = cap;
+}
+
+double get_vaccination_rate(SimulationService *service) {
+    int total_pop = get_total_population(service);
+    if (total_pop == 0) return 0.0;
+    int vac_count = 0;
+    for (int i = 0; i < service->workers_count; i++) {
+        if (service->workers[i].base.state != D && service->workers[i].vaccinated) {
+            vac_count++;
+        }
+    }
+    for (int i = 0; i < service->patients_count; i++) {
+        if (service->patients[i].base.state != D && service->patients[i].vaccinated) {
+            vac_count++;
+        }
+    }
+    return (double)vac_count / (double)total_pop;
+}
+
+static double rate_to_prob(double rate) {
+    if (rate <= 0.0) return 0.0;
+    return 1.0 - exp(-rate);
+}
+
+void spawn_patient_if_needed(SimulationService *service,
+                             double beta_g, double sigma, double alpha,
+                             double gamma_, double gamma_u,
+                             double mu_i, double mu_u, double mu_nat) {
+    if (((double)rand() / RAND_MAX) < service->arrival_rate) {
+        Cell *cell = get_random_cell(service);
+        char pid[64];
+        sprintf(pid, "PID-%d", rand());
+        int severity = 1;
+        double r = (double)rand() / RAND_MAX;
+        if (r < 0.6) severity = 1;
+        else if (r < 0.9) severity = 2;
+        else severity = 3;
+
+        int vaccinated = (((double)rand() / RAND_MAX) < 0.3) ? 1 : 0;
+        int wears_mask = (((double)rand() / RAND_MAX) < 0.7) ? 1 : 0;
+        int resistant = (((double)rand() / RAND_MAX) < 0.3) ? 1 : 0;
+
+        // p_resus fijo
+        double p_resus = 0.001;
+
+        // age aleatorio
+        double age = 65.0 + (rand()%30) - 15.0; // +/- 15
+
+        Patient newp = create_patient(pid, cell, beta_g, sigma, alpha,
+                                      gamma_, gamma_u,
+                                      mu_i, mu_u, mu_nat,
+                                      p_resus,
+                                      severity,
+                                      age,
+                                      1,
+                                      vaccinated,
+                                      wears_mask,
+                                      resistant);
+
+        add_patient(service, newp);
+        log_debug("Nuevo paciente %s ingresó en la celda (%d, %d).", pid, cell->x, cell->y);
+    }
+}
+
+void simulation_step(SimulationService *service, int current_step,
+                     double beta_h, double beta_g, double sigma,
+                     double alpha, double gamma_, double gamma_u,
+                     double mu_i, double mu_u, double mu_nat) {
+    // 1) Nuevo paciente
+    spawn_patient_if_needed(service, beta_g, sigma, alpha, gamma_, gamma_u, mu_i, mu_u, mu_nat);
+
+    // 2) Step de cada agente
+    // Copiamos para no iterar punteros en vivo
+    int wcount = service->workers_count;
+    HealthcareWorker *wcopy = (HealthcareWorker*)malloc(wcount*sizeof(HealthcareWorker));
+    memcpy(wcopy, service->workers, wcount*sizeof(HealthcareWorker));
+
+    int pcount = service->patients_count;
+    Patient *pcopy = (Patient*)malloc(pcount*sizeof(Patient));
+    memcpy(pcopy, service->patients, pcount*sizeof(Patient));
+
+    for (int i = 0; i < wcount; i++) {
+        healthcare_worker_step(&wcopy[i], current_step, service);
+    }
+    for (int i = 0; i < pcount; i++) {
+        patient_step(&pcopy[i], current_step, service);
+    }
+
+    free(wcopy);
+    free(pcopy);
+
+    // 3) Asignar camas
+    assign_icu_beds(service);
+}
+File: utils/logger.h
+c
+Copiar
+#ifndef LOGGER_H
+#define LOGGER_H
+
+void log_debug(const char *format, ...);
+
+#endif
+File: utils/logger.c
+c
+Copiar
+#include "logger.h"
+#include <stdio.h>
+#include <stdarg.h>
+
+void log_debug(const char *format, ...) {
+    // En este ejemplo imprimimos siempre (nivel DEBUG).
+    // Se puede sofisticar con niveles de logging.
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    printf("\n");
+    va_end(args);
+}
+File: distributions.h
+c
+Copiar
+#ifndef DISTRIBUTIONS_H
+#define DISTRIBUTIONS_H
+
+/**
+ * Muestra un muestreo de Beta(a,b) usando:
+ *   X = Gamma(a, 1)
+ *   Y = Gamma(b, 1)
+ *   return X / (X + Y)
+ */
+double sample_beta(double a, double b);
+
+/**
+ * Muestra un muestreo de Gamma(k, theta) (shape=k, scale=theta).
+ * Para shape ~2, ~5, etc. se usa una aproximación.
+ */
+double sample_gamma(double shape, double scale);
+
+#endif
+File: distributions.c
+c
+Copiar
+#include "distributions.h"
+#include <stdlib.h>
+#include <math.h>
+#include <time.h>
+
+/**
+ * Para shape>1, se implementa una aproximación de la distribución Gamma con
+ * el método de Marsaglia y Tsang (reducido). 
+ * Nota: Para producción es mejor usar GSL.
+ */
+static double marsaglia_tsang_gamma(double shape) {
+    // Asumiendo shape > 1
+    double d = shape - 1.0/3.0;
+    double c = 1.0 / sqrt(9.0*d);
+    while (1) {
+        double x, v;
+        do {
+            double u = ((double)rand() / RAND_MAX);
+            double v1 = 2.0 * ((double)rand() / RAND_MAX) - 1.0;
+            double v2 = 2.0 * ((double)rand() / RAND_MAX) - 1.0;
+            double r2 = v1*v1 + v2*v2;
+            if (r2 <= 1.0 && r2 != 0) {
+                double fac = sqrt(-2.0 * log(r2) / r2);
+                x = v1 * fac;
+                // solo necesitamos x
+                break;
+            }
+        } while(1);
+        v = 1.0 + c*x;
+        if (v <= 0) continue;
+        v = v*v*v;
+        double u2 = ((double)rand() / RAND_MAX);
+        double x2 = x*x;
+        if (u2 < 1.0 - 0.0331*x2*x2) return d*v;
+        if (log(u2) < 0.5*x2 + d*(1.0 - v + log(v))) return d*v;
+    }
+}
+
+double sample_gamma(double shape, double scale) {
+    // Si shape < 1, transformamos shape -> shape+1 y escalamos
+    if (shape < 1.0) {
+        double val = sample_gamma(shape + 1.0, scale);
+        double r = ((double)rand() / RAND_MAX);
+        return val * pow(r, 1.0/shape);
+    }
+    // Marsaglia & Tsang
+    double g = marsaglia_tsang_gamma(shape);
+    return g * scale;
+}
+
+double sample_beta(double a, double b) {
+    // Beta(a,b) ~ X/(X+Y) con X ~ Gamma(a,1), Y ~ Gamma(b,1)
+    double x = sample_gamma(a, 1.0);
+    double y = sample_gamma(b, 1.0);
+    return x / (x + y);
+}
+File: main.c
+c
+Copiar
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include "services/simulation_service.h"
+#include "models/agent.h"
+#include "distributions.h"
+
+static void sample_parameters(
+    double *beta_h, double *beta_g, double *sigma, double *alpha,
+    double *gamma_, double *gamma_u, double *mu_i, double *mu_u,
+    double *mu_nat, double *p_resus
+) {
+    // Beta(2,5)
+    *beta_h = sample_beta(2.0, 5.0);
+    *beta_g = sample_beta(2.0, 5.0);
+    // Gamma(2, scale=1/0.2=5) => shape=2, scale=5
+    *sigma  = sample_gamma(2.0, 5.0); // E->I
+    *alpha  = sample_beta(2.0, 5.0); // lo convertimos a Beta(2,5) en Python, lo igualamos
+    *gamma_ = sample_gamma(2.0, 1.0/0.142); // ~7 dias => scale ~ 7.04
+    *gamma_u= sample_gamma(2.0, 1.0/0.071); // ~14 dias => scale ~14.08
+    *mu_i   = sample_beta(2.0, 98.0);  // ~0.02
+    *mu_u   = sample_beta(2.0, 32.0);  // ~0.06
+    *mu_nat = 1.0 / (80.0 * 365.0);    // ~3.42e-5
+    *p_resus= sample_beta(2.0, 200.0); // Tasa re-suscep
+}
+
+static void run_simulation(
+    const char *replicate_id,
+    int max_steps,
+    int initial_patients,
+    int initial_workers
+) {
+    int width = 20;
+    int height = 20;
+    int n_icu_rows = 3;
+    int icu_capacity = 5;
+
+    SimulationService *service = create_simulation_service(width, height, n_icu_rows, icu_capacity);
+
+    double beta_h, beta_g, sigma, alpha, gamma_, gamma_u;
+    double mu_i, mu_u, mu_nat, p_resus;
+    sample_parameters(&beta_h, &beta_g, &sigma, &alpha, &gamma_, &gamma_u,
+                      &mu_i, &mu_u, &mu_nat, &p_resus);
+
+    // Crear trabajadores de la salud
+    for (int i = 0; i < initial_workers; i++) {
+        Cell *cell = get_random_cell(service);
+        char idw[64];
+        sprintf(idw, "HW-%d", rand());
+        int vaccinated = (((double)rand()/RAND_MAX) < 0.8) ? 1 : 0;
+        int wears_mask = (((double)rand()/RAND_MAX) < 0.9) ? 1 : 0;
+        int resistant = (((double)rand()/RAND_MAX) < 0.2) ? 1 : 0;
+        double age = 25 + rand()%40; // 25..65
+        HealthcareWorker hw = create_healthcare_worker(
+            idw, cell,
+            beta_h, sigma, alpha, gamma_, gamma_u,
+            mu_i, mu_u, mu_nat, p_resus,
+            age,
+            1, // use_prob
+            vaccinated,
+            wears_mask,
+            resistant
+        );
+        add_worker(service, hw);
+    }
+
+    // Crear pacientes
+    for (int i = 0; i < initial_patients; i++) {
+        Cell *cell = get_random_cell(service);
+        char pid[64];
+        sprintf(pid, "P-%d", rand());
+        double rr = (double)rand() / RAND_MAX;
+        int severity = 1;
+        if (rr < 0.6) severity = 1;
+        else if (rr < 0.9) severity = 2;
+        else severity = 3;
+
+        int vaccinated = (((double)rand()/RAND_MAX) < 0.3) ? 1 : 0;
+        int wears_mask = (((double)rand()/RAND_MAX) < 0.7) ? 1 : 0;
+        int resistant = (((double)rand()/RAND_MAX) < 0.3) ? 1 : 0;
+        double age = 30 + rand()%60; // 30..90
+
+        Patient p = create_patient(
+            pid, cell,
+            beta_g, sigma, alpha, gamma_, gamma_u,
+            mu_i, mu_u, mu_nat,
+            p_resus,
+            severity,
+            age,
+            1,
+            vaccinated,
+            wears_mask,
+            resistant
+        );
+        add_patient(service, p);
+    }
+
+    // Infectar a 5
+    int to_infect = (initial_patients < 5) ? initial_patients : 5;
+    for (int i = 0; i < to_infect; i++) {
+        service->patients[i].base.state = I;
+    }
+
+    // Arrays para conteos
+    FILE *fcsv = fopen("resultados_replica.csv", "a");
+    if (fcsv) {
+        fprintf(fcsv, "replicate,step,S,V,E,I,U,R,D,ICU_occ,ICU_cap,vacc_rate\n");
+    }
+
+    for (int step = 1; step <= max_steps; step++) {
+        simulation_step(service, step,
+                        beta_h, beta_g, sigma, alpha, gamma_,
+                        gamma_u, mu_i, mu_u, mu_nat);
+
+        // Guardar conteos
+        int counts[7];
+        get_state_counts(service, counts);
+
+        int occ, cap;
+        get_icu_occupancy(service, &occ, &cap);
+        double vacc_rate = get_vaccination_rate(service);
+
+        if (fcsv) {
+            fprintf(fcsv, "%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f\n",
+                    replicate_id, step,
+                    counts[S], counts[V], counts[E], counts[I], counts[U],
+                    counts[R], counts[D],
+                    occ, cap,
+                    vacc_rate
+                );
+        }
+
+        if ((step % 10 == 0) || (step == max_steps)) {
+            printf("Replica %s - Step=%d => Infectious=%d, Deaths=%d, Recov=%d, Patients=%d, UCI=%d/%d, Vacc=%.2f%%\n",
+                   replicate_id, step,
+                   get_total_infectious(service),
+                   service->deaths_count,
+                   service->recoveries_count,
+                   service->patients_count,
+                   occ, cap,
+                   100.0* vacc_rate
+            );
+        }
+    }
+
+    if (fcsv) {
+        fclose(fcsv);
+    }
+
+    free_simulation_service(service);
+}
+
+
+int main() {
+    srand((unsigned int)time(NULL));
+
+    int num_replicates = 5;
+    int max_steps = 50;
+    int initial_patients = 50;
+    int initial_workers = 10;
+
+    // Para no sobreescribir en cada réplica, limpiamos "resultados_replica.csv"
+    // Si deseas un CSV diferente por réplica, modifícalo a voluntad.
+    FILE *fcsv = fopen("resultados_replica.csv", "w");
+    if (fcsv) {
+        fprintf(fcsv, "replicate,step,S,V,E,I,U,R,D,ICU_occ,ICU_cap,vacc_rate\n");
+        fclose(fcsv);
+    }
+
+    for (int r = 1; r <= num_replicates; r++) {
+        char rep_id[32];
+        sprintf(rep_id, "Replicate-%d", r);
+        printf("Iniciando %s...\n", rep_id);
+        run_simulation(rep_id, max_steps, initial_patients, initial_workers);
+    }
+
+    printf("Simulaciones completas. Revisa el archivo 'resultados_replica.csv' para datos.\n");
+    return 0;
+}

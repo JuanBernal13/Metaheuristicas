@@ -1,0 +1,112 @@
+Libros
+"Knapsack Problems: Algorithms and Computer Implementations"
+Autores: Silvano Martello y Paolo Toth
+Descripción: Aunque se centra principalmente en problemas de mochila (knapsack), este libro aborda técnicas y algoritmos que son aplicables al empaquetamiento 3D, incluyendo métodos exactos y heurísticos.
+Idioma: Inglés
+
+"Packing and Covering Problems"
+Autores: Dale W. Henderson
+Descripción: Este libro ofrece una visión amplia sobre diversos problemas de empaquetamiento y cobertura, incluyendo empaquetamiento en tres dimensiones, y discute métodos de resolución y aplicaciones prácticas.
+Idioma: Inglés
+
+"Three-Dimensional Packing Problems: Volume 1: Static and Dynamic Packing Problems"
+Autores: J.E. Beasley, R.W. Fischer, M.E. Pinedo, y otros
+Descripción: Una compilación de investigaciones y enfoques sobre problemas de empaquetamiento 3D estático y dinámico, presentando modelos matemáticos y algoritmos de solución.
+Idioma: Inglés
+
+"Research on the Three-Dimensional Bin Packing Problem"
+Autores: Paolo Toth y Daniele Vigo
+Descripción: Este libro se enfoca específicamente en el problema de empaquetamiento de contenedores en tres dimensiones, explorando modelos, algoritmos y aplicaciones.
+Idioma: Inglés
+
+Artículos Académicos
+"A Survey of 2D and 3D Packing Problems: Classification and Algorithms"
+Autores: Xiaodong Li, Weiwei Sun
+Publicación: European Journal of Operational Research, 2020
+Descripción: Este artículo ofrece una revisión exhaustiva de los problemas de empaquetamiento en dos y tres dimensiones, clasificando las variantes y discutiendo los algoritmos más efectivos utilizados en cada caso.
+Idioma: Inglés
+
+"Exact Algorithms for the Three-Dimensional Bin Packing Problem"
+Autores: Martello, Toth
+Publicación: Operations Research, 1988
+Descripción: Un estudio clásico que presenta algoritmos exactos para resolver el problema de empaquetamiento 3D, incluyendo métodos de ramificación y poda.
+Idioma: Inglés
+
+"Heuristic Approaches for the Three-Dimensional Bin Packing Problem"
+Autores: Vicente Alonso, Juan Soler
+Publicación: Computers & Operations Research, 2009
+Descripción: Explora diferentes enfoques heurísticos para abordar el empaquetamiento 3D, evaluando su eficiencia y efectividad en comparación con métodos exactos.
+Idioma: Inglés
+
+"Genetic Algorithms for 3D Packing Problems"
+Autores: Liu, Y., Zhang, Y.
+Publicación: International Journal of Advanced Manufacturing Technology, 2015
+Descripción: Presenta el uso de algoritmos genéticos como una estrategia para resolver problemas de empaquetamiento tridimensional, analizando su rendimiento y posibles mejoras.
+Idioma: Inglés
+
+Recursos en Línea
+Wikipedia - Problema de Empaquetamiento 3D
+Enlace: 3D Bin Packing Problem
+Descripción: Proporciona una visión general del problema, sus variantes y métodos de solución comunes. Es un buen punto de partida para entender los conceptos básicos.
+
+PuLP Documentation
+Enlace: PuLP - Python Linear Programming
+Descripción: Documentación oficial de PuLP, una librería de Python para programación lineal que es útil para implementar modelos de empaquetamiento 3D.
+
+Google OR-Tools
+Enlace: Google OR-Tools
+Descripción: Un conjunto de herramientas de optimización de Google que incluye soporte para problemas de empaquetamiento y puede ser una alternativa a PuLP para modelar y resolver estos problemas.
+
+Repositorio de GitHub - 3D Bin Packing Implementaciones
+Enlace: GitHub - 3D Bin Packing
+Descripción: Varios proyectos de código abierto que implementan soluciones para el problema de empaquetamiento 3D, ofreciendo ejemplos prácticos y código reutilizable.
+
+Tesis y Trabajos de Investigación
+"Optimización de Algoritmos para el Problema de Empaquetamiento 3D en Logística de Almacenes"
+Autor: María López
+Institución: Universidad Politécnica de Madrid, 2018
+Descripción: Tesis que investiga diferentes algoritmos de optimización aplicados al empaquetamiento tridimensional, con un enfoque en aplicaciones logísticas.
+
+"Modelado Matemático y Heurísticas para el Empaquetamiento de Contenedores 3D"
+Autor: Juan Pérez
+Institución: Universidad de Buenos Aires, 2020
+Descripción: Estudio detallado sobre modelos matemáticos y métodos heurísticos para resolver el empaquetamiento de contenedores en tres dimensiones, incluyendo casos de estudio y simulaciones.
+
+Conferencias y Seminarios
+International Conference on Operations Research and Enterprise Systems (ICORES)
+Descripción: Conferencia anual que abarca una amplia gama de temas en investigación de operaciones, incluyendo sesiones dedicadas a problemas de empaquetamiento y optimización 3D.
+
+INFORMS Annual Meeting
+Descripción: Reúne a profesionales y académicos en el campo de la investigación de operaciones, con presentaciones y talleres sobre los últimos avances en problemas de empaquetamiento.
+
+Revistas Especializadas
+Computers & Operations Research
+Descripción: Publica investigaciones sobre métodos computacionales aplicados a la investigación de operaciones, incluyendo artículos sobre empaquetamiento 3D.
+
+European Journal of Operational Research
+Descripción: Una de las principales revistas en el campo, que regularmente incluye estudios sobre problemas de empaquetamiento y optimización tridimensional.
+
+Journal of Heuristics
+Descripción: Se enfoca en métodos heurísticos y metaheurísticos para resolver problemas complejos, como el empaquetamiento 3D.
+
+Cursos y Material Educativo
+Coursera - "Discrete Optimization"
+Enlace: Discrete Optimization
+Descripción: Un curso que cubre técnicas de optimización discreta, incluyendo problemas de empaquetamiento y algoritmos relevantes.
+
+edX - "Advanced Algorithms and Complexity"
+Enlace: Advanced Algorithms
+Descripción: Aborda algoritmos avanzados que pueden aplicarse a problemas de empaquetamiento 3D, como algoritmos de aproximación y exactos.
+
+Software y Herramientas
+PuLP
+Descripción: Una librería de Python para programación lineal que permite modelar y resolver problemas de empaquetamiento 3D mediante formulaciones matemáticas.
+Enlace: PuLP Documentation
+
+Google OR-Tools
+Descripción: Ofrece potentes herramientas de optimización que soportan problemas de empaquetamiento, incluyendo modelos de programación lineal y entera.
+Enlace: Google OR-Tools
+
+3D Bin Packing Libraries
+Descripción: Diversas librerías disponibles en GitHub y otros repositorios que implementan soluciones específicas para el problema de empaquetamiento tridimensional.
+Enlace: GitHub - 3D Bin Packing

@@ -1425,3 +1425,21 @@ int main() {
     printf("Simulaciones completas. Revisa el archivo 'resultados_replica.csv' para datos.\n");
     return 0;
 }
+
+Cómo compilar y ejecutar
+Coloca todos los archivos con la misma estructura de carpetas que se muestra arriba.
+Asegúrate de tener un compilador C (por ejemplo, gcc).
+Ejecuta:
+bash
+Copiar
+make
+Esto generará un binario llamado klebsiella_sim.
+Para correr la simulación:
+bash
+Copiar
+./klebsiella_sim
+Revisa el archivo resultados_replica.csv para ver los conteos por paso.
+Nota: Se omite la parte de visualización en C. Si deseas graficar los resultados, puedes usar la salida CSV y luego usar Python/R/Gnuplot para leer y graficar la información.
+
+Con esto tienes una versión en C (múltiples archivos) del modelo de simulación SEIURD adaptado para Klebsiella pneumoniae.
+

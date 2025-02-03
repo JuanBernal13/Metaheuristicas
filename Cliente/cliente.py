@@ -13,9 +13,9 @@ def main():
     url = "http://localhost:8080/api/simulacion"
     
     # Parámetros de entrada
-    numero_replicas = 30
+    numero_replicas = 2
     pasos_maximos = 10000
-    pacientes_iniciales = 25
+    pacientes_iniciales = 10
     trabajadores_iniciales = 5
     tasa_llegada = 0.5  # Tasa media de llegada (Poisson)
 
